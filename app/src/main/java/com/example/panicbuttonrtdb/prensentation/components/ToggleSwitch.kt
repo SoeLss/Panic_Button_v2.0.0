@@ -1,7 +1,10 @@
 package com.example.panicbuttonrtdb.prensentation.components
 
 import android.content.Context
+import android.os.VibrationEffect
+import android.os.Vibrator
 import android.util.Log
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,8 +46,15 @@ import com.example.panicbuttonrtdb.R
 import com.example.panicbuttonrtdb.notification.sendNotification
 import com.example.panicbuttonrtdb.viewmodel.ViewModel
 import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.ExperimentalLayoutApi // <-- IMPORT BARU
+import androidx.compose.foundation.layout.FlowRow // <-- IMPORT BARU
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import com.example.panicbuttonrtdb.utils.getCurrentLocation // Import fungsi utilitas
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ToggleSwitch(
     viewModel: ViewModel,
@@ -58,6 +68,42 @@ fun ToggleSwitch(
     val buzzerState by viewModel.buzzerState.observeAsState(initial = "Off")
     var message by remember { mutableStateOf("") }
     var showError by remember {mutableStateOf(false)}
+    var isLoading by remember { mutableStateOf(false) }
+
+    // 1. Buat Launcher untuk meminta izin
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions ->
+            if (permissions.getOrDefault(android.Manifest.permission.ACCESS_FINE_LOCATION, false)) {
+                // Izin diberikan, panggil fungsi untuk mendapatkan lokasi dan kirim data
+                isLoading = true
+                getCurrentLocation(context) { lat, lon ->
+                    viewModel.saveMonitorData(
+                        message = message,
+                        priority = selectedPriority,
+                        status = "Proses",
+                        latitude = lat,
+                        longitude = lon
+                    )
+                    viewModel.setBuzzerState("on")
+                    viewModel.updateBuzzerState(
+                        isOn = true,
+                        priority = selectedPriority
+                    )
+                    sendNotification(
+                        context,
+                        "Panic Button",
+                        "Buzzer telah diaktifkan dengan skala prioritas $selectedPriority"
+                    )
+                    showDialog = false
+                    isLoading = false
+                }
+            } else {
+                // Izin ditolak, beri tahu user
+                Toast.makeText(context, "Izin lokasi dibutuhkan untuk fitur ini", Toast.LENGTH_SHORT).show()
+            }
+        }
+    )
 
 
     Column(
@@ -114,7 +160,7 @@ fun ToggleSwitch(
     }
     if (buzzerState == "on") {
         LaunchedEffect(key1 = buzzerState) {
-            delay(20000)
+            delay(30000)
             viewModel.setBuzzerState("off")
             viewModel.updateBuzzerState(isOn = false)
         }
@@ -143,12 +189,36 @@ fun ToggleSwitch(
                 }
             },
             text = {
+                val quickMessages = listOf("Kebakaran", "Bantuan Medis", "Kerumunan Tidak Wajar", "Hewan Berbahaya", "Tolong Segera Datang")
                 Column {
                     Text(
                         "Tambahkan Pesan dan Prioritas",
                         color = colorResource(id = R.color.font2)
                     )
                     Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(16.dp)) // <-- BARU
+
+                    Text("Quick Massage:", fontSize = 12.sp, color = colorResource(id = R.color.font2)) // <-- BARU
+                    Spacer(modifier = Modifier.height(4.dp)) // <-- BARU
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp), // Jarak antar tombol
+                        verticalArrangement = Arrangement.spacedBy(4.dp)   // Jarak jika ada baris baru
+                    ) {
+                        quickMessages.forEach { quickMsg ->
+                            Button(
+                                onClick = { message = quickMsg },
+                                shape = RoundedCornerShape(8.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorResource(id = R.color.background_button)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                            ) {
+                                Text(text = quickMsg, fontSize = 11.sp, color = colorResource(id = R.color.font2))
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
                         value = message,
                         onValueChange = { message = it },
@@ -185,22 +255,15 @@ fun ToggleSwitch(
                             showError = true
                         } else {
                             showError = false
-                            viewModel.setBuzzerState("on")
-                            viewModel.updateBuzzerState(
-                                isOn = true,
-                                priority = selectedPriority
-                            )
-                            viewModel.saveMonitorData(
-                                message = message,
-                                priority = selectedPriority,
-                                status = "Proses"
-                            )
-                            sendNotification(
-                                context,
-                                "Panic Button",
-                                "Buzzer telah diaktifkan dengan skala prioritas $selectedPriority"
-                            )
-                            showDialog = false
+                            val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+                            vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+
+                            // Cukup panggil launcher untuk meminta izin.
+                            // Sisanya akan diurus oleh onResult dari launcher.
+                            locationPermissionLauncher.launch(arrayOf(
+                                android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                android.Manifest.permission.ACCESS_COARSE_LOCATION
+                            ))
                         }
                     },
                     colors = ButtonDefaults.buttonColors(

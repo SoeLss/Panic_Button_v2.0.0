@@ -30,7 +30,9 @@ data class MonitorRecord(
     val message: String = "",
     val priority: String = "",
     val time: String = "",
-    val status: String = ""
+    val status: String = "",
+    val latitude: Double = 0.0,
+    val longitude: Double = 0.0
 )
 
 data class OnBoardingData(

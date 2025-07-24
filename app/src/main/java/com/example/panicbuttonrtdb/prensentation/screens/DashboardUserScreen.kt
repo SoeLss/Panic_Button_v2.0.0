@@ -251,7 +251,7 @@ fun DashboardUserScreen(
                     )
                     .padding(vertical = 16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     modifier = Modifier
@@ -262,6 +262,17 @@ fun DashboardUserScreen(
                     color = colorResource(id = R.color.font),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
+                )
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Start)
+                        .padding(start = 24.dp, end = 24.dp),
+                    text = "Status:\nKuning = Admin telah melihat\nPutih = Admin belum melihat",
+                    color = colorResource(id = R.color.font),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    softWrap = true // penting agar bisa pindah baris
                 )
                 LazyColumn { // data akan muncul di sini
                     items(recordData){ record->

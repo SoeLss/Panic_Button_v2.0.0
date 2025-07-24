@@ -190,7 +190,13 @@ open class ViewModel(private val context: Context) : ViewModel() {
     }
 
     // Fungsi untuk menyimpan data ke path /monitor di Firebase
-    fun saveMonitorData(message: String, priority: String, status: String) {
+    fun saveMonitorData(
+        message: String,
+        priority: String,
+        status: String,
+        latitude: Double,   // <-- Tambahkan parameter ini
+        longitude: Double   // <-- Tambahkan parameter ini
+    ) {
 
         val data = mapOf(
             "name" to currentUserName,
@@ -198,7 +204,9 @@ open class ViewModel(private val context: Context) : ViewModel() {
             "message" to message,
             "priority" to priority,
             "status" to status,
-            "time" to getCurrentTimestampFormatted() // Waktu saat toggle diaktifkan
+            "time" to getCurrentTimestampFormatted(), // Waktu saat toggle diaktifkan
+            "latitude" to latitude,      // Tambahkan ini
+            "longitude" to longitude     // Tambahkan ini
         )
 
         // Simpan data ke Firebase
@@ -304,9 +312,9 @@ open class ViewModel(private val context: Context) : ViewModel() {
                         val record = recordSnapshot.getValue(MonitorRecord::class.java)
                         record?.let { records.add(it)
 
-                    }
+                        }
 
-                    _monitorData.value = records
+                        _monitorData.value = records
                     }
 
                     _monitorData.value = records // take 3 data
@@ -402,52 +410,52 @@ open class ViewModel(private val context: Context) : ViewModel() {
     fun savePhoneNumberAndNote(houseNumber: String, phoneNumber: String, note: String) {
         usersRef.orderByChild("houseNumber").equalTo(houseNumber)
             .addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    for (child in snapshot.children) {
-                        child.ref.child("phoneNumber").setValue(phoneNumber)
-                        child.ref.child("note").setValue(note)
-                            .addOnCompleteListener { task ->
-                                if (task.isSuccessful) {
-                                    Log.d("Firebase", "Data berhasil diperbarui untuk $houseNumber")
-                                    Toast.makeText(context, "Keterangan berhasil simpan", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    Log.e("Firebase", "Gagal memperbarui data: ${task.exception?.message}")
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (snapshot.exists()) {
+                        for (child in snapshot.children) {
+                            child.ref.child("phoneNumber").setValue(phoneNumber)
+                            child.ref.child("note").setValue(note)
+                                .addOnCompleteListener { task ->
+                                    if (task.isSuccessful) {
+                                        Log.d("Firebase", "Data berhasil diperbarui untuk $houseNumber")
+                                        Toast.makeText(context, "Keterangan berhasil simpan", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        Log.e("Firebase", "Gagal memperbarui data: ${task.exception?.message}")
+                                    }
                                 }
-                            }
+                        }
+                    } else {
+                        Log.e("Firebase", "Data dengan houseNumber $houseNumber tidak ditemukan")
                     }
-                } else {
-                    Log.e("Firebase", "Data dengan houseNumber $houseNumber tidak ditemukan")
                 }
-            }
 
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("Firebase", "Error: ${error.message}")
-            }
-        })
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e("Firebase", "Error: ${error.message}")
+                }
+            })
     }
 
     //fun utk fetch no hp dan note user
     fun fetchUserData(houseNumber: String) {
         usersRef.orderByChild("houseNumber").equalTo(houseNumber)
             .addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    val userSnapshot = snapshot.children.first()
-                    val phoneNumber = userSnapshot.child("phoneNumber").getValue(String::class.java) ?: ""
-                    val note = userSnapshot.child("note").getValue(String::class.java) ?: ""
-                    _userData.postValue(
-                        mapOf(
-                            "phoneNumber" to phoneNumber,
-                            "note" to note)
-                    )
+                override fun onDataChange(snapshot: DataSnapshot) {
+                    if (snapshot.exists()) {
+                        val userSnapshot = snapshot.children.first()
+                        val phoneNumber = userSnapshot.child("phoneNumber").getValue(String::class.java) ?: ""
+                        val note = userSnapshot.child("note").getValue(String::class.java) ?: ""
+                        _userData.postValue(
+                            mapOf(
+                                "phoneNumber" to phoneNumber,
+                                "note" to note)
+                        )
+                    }
                 }
-            }
 
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("fetchUserData", "Gagal mengambil data: ${error.message}")
-            }
-        })
+                override fun onCancelled(error: DatabaseError) {
+                    Log.e("fetchUserData", "Gagal mengambil data: ${error.message}")
+                }
+            })
     }
 
     private fun getCurrentTimestampFormatted(): String {

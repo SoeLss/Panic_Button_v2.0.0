@@ -17,6 +17,8 @@ import com.example.panicbuttonrtdb.notification.createNotificationChannel
 import com.example.panicbuttonrtdb.notification.sendNotification
 import com.example.panicbuttonrtdb.ui.theme.PanicButtonRtdbTheme
 
+
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

@@ -90,4 +90,12 @@ dependencies {
     implementation ("io.coil-kt:coil-compose:2.7.0")
     implementation ("io.coil-kt:coil:2.1.0")
     implementation ("androidx.compose.animation:animation:1.7.3")
+    implementation ("androidx.core:core-ktx:1.12.0")
+    implementation ("com.google.android.gms:play-services-location:21.2.0")
+    implementation ("com.google.maps.android:maps-compose:4.3.3")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation ("com.google.android.gms:play-services-location:21.2.0")
+    implementation ("com.google.maps.android:maps-compose:4.3.3")
+
+
 }
