@@ -1,14 +1,33 @@
 {
   "project_info": {
-    "project_number": "608844512131",
-    "firebase_url": "https://panicbuttonrtdb-default-rtdb.asia-southeast1.firebasedatabase.app",
-    "project_id": "panicbuttonrtdb",
-    "storage_bucket": "panicbuttonrtdb.appspot.com"
+    "project_number": "415344446237",
+    "firebase_url": "https://panicbuttonrtdb-eccd1-default-rtdb.firebaseio.com",
+    "project_id": "panicbuttonrtdb-eccd1",
+    "storage_bucket": "panicbuttonrtdb-eccd1.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:608844512131:android:7c1b38e9dc0de6d73b54b6",
+        "mobilesdk_app_id": "1:415344446237:android:ce94621d96b0ffa56e2ff4",
+        "android_client_info": {
+          "package_name": "com.example.adminpanicbutton"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyACjsGDECkgk_-sNd-7E997ZDjrb_XNJkM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:415344446237:android:c03223bc528a9b616e2ff4",
         "android_client_info": {
           "package_name": "com.example.panicbuttonrtdb"
         }
@@ -16,7 +35,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyCuDBc2do22fGS2JEN5zR3jSUmGRwDLNDU"
+          "current_key": "AIzaSyACjsGDECkgk_-sNd-7E997ZDjrb_XNJkM"
         }
       ],
       "services": {
