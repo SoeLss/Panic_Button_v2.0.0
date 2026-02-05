@@ -4,25 +4,25 @@ import com.google.firebase.database.PropertyName
 
 // Data class untuk User
 data class User (
-    val name: String,
-    val houseNumber: String,
-    val password: String,
+    val name: String = "",
+    val houseNumber: String = "",
+    val password: String = "",
     val phoneNumber: String = "",
     val note: String = "",
+    val role: String = "user", // <-- TAMBAHAN BARU, default role adalah "user"
 
-    @get:PropertyName("profileImage") //getter
-    @set:PropertyName("profileImage") //setter
+    @get:PropertyName("profileImage")
+    @set:PropertyName("profileImage")
     var imageProfile: String = "",
 
     @get:PropertyName("coverImage")
     @set:PropertyName("coverImage")
     var coverImage: String = ""
 
-) {
-    // Constructor tanpa argumen diperlukan oleh Firebase
-    constructor() : this("", "", "")
-}
+    // Constructor kosong tidak lagi diperlukan jika semua properti punya nilai default
+)
 
+// Data class ini sudah benar, tidak perlu diubah.
 data class MonitorRecord(
     val id: String = "",
     val name: String = "",
@@ -35,6 +35,7 @@ data class MonitorRecord(
     val longitude: Double = 0.0
 )
 
+// Data class ini untuk UI Onboarding, tidak perlu diubah.
 data class OnBoardingData(
     val image: Int,
     val title: String,

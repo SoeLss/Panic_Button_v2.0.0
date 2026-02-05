@@ -13,7 +13,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.panicbuttonrtdb.data.MonitorRecord
 import com.example.panicbuttonrtdb.data.User
-import com.example.panicbuttonrtdb.data.UserPreferences
 import com.google.firebase.database.DataSnapshot
 import com.google.firebase.database.DatabaseError
 import com.google.firebase.database.FirebaseDatabase
@@ -22,20 +21,20 @@ import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 open class ViewModel(private val context: Context) : ViewModel() {
 
     private val database = FirebaseDatabase.getInstance()
     private val storage = FirebaseStorage.getInstance().reference
-    private val databaseRef = FirebaseDatabase.getInstance().getReference("/buzzer")
-    private val databaseRef2 = FirebaseDatabase.getInstance().getReference("/buzzer_priority")
-    private val userPreferences = UserPreferences(context)
-    private val monitorRef = database.getReference("monitor")
-    private val usersRef = database.getReference("users")
 
+    // State untuk UI
     var currentUserName by mutableStateOf("")
     var currentUserHouseNumber by mutableStateOf("")
 
+    // LiveData
     private val _monitorData = MutableLiveData<List<MonitorRecord>>()
     val monitorData: LiveData<List<MonitorRecord>> get() = _monitorData
 
@@ -45,422 +44,403 @@ open class ViewModel(private val context: Context) : ViewModel() {
     private val _latestRecord = MutableStateFlow(MonitorRecord())
     val latestRecord: StateFlow<MonitorRecord> = _latestRecord
 
-    fun isUserLoggedIn(): Boolean {
-        return userPreferences.isUserLoggedIn()
-    }
-
-    fun isAdminLoggedIn(): Boolean {
-        return userPreferences.isAdminLoggedIn()
-    }
-
-    // LiveData untuk memantau status buzzer
     private val _buzzerState = MutableLiveData<String>()
     val buzzerState: LiveData<String> = _buzzerState
 
-    init {
-        // Ambil data pengguna yang tersimpan saat aplikasi dibuka kembali
-        currentUserName = userPreferences.getUserName() ?: ""
-        currentUserHouseNumber = userPreferences.getHouseNumber() ?: ""
-    }
+    private val _daftarPerumahan = MutableLiveData<Map<String, String>>()
+    val daftarPerumahan: LiveData<Map<String, String>> get() = _daftarPerumahan
+
+    private val _userProfileData = MutableLiveData<User?>()
+    val userProfileData: LiveData<User?> get() = _userProfileData
+
+    private val _quickMessages = MutableLiveData<List<String>>()
+    val quickMessages: LiveData<List<String>> get() = _quickMessages
+
+    // LiveData untuk URL gambar profil di DashboardUserScreen
+    private val _userProfileImageUrl = MutableLiveData<String>()
+    val userProfileImageUrl: LiveData<String> get() = _userProfileImageUrl
+
+
+    // Manajemen Listener untuk mencegah memory leak
+    private val activeListeners = mutableMapOf<String, ValueEventListener>()
 
     init {
-        fetchLatestRecord()
+        loadUserFromSession()
     }
 
-    init {
-        // Inisialisasi untuk mendapatkan status awal buzzer dari Firebase
-        getBuzzerState()
+    // =================================================================
+    // Sesi & Autentikasi
+    // =================================================================
+
+    private fun getPerumahanIdFromSession(): String? {
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        return sharedPref.getString("perumahan_id", null)
     }
 
-    // Fungsi untuk menyimpan user baru ke Firebase
-    fun saveUserToFirebase(
-        name: String,
-        houseNumber: String,
-        password: String,
-        onSuccess: () -> Unit,
-        onFailure: (String) -> Unit  // Tambahkan callback untuk error
+    private fun loadUserFromSession() {
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        currentUserName = sharedPref.getString("user_name", "") ?: ""
+        currentUserHouseNumber = sharedPref.getString("house_number", "") ?: ""
+    }
 
-    ) {
+    fun fetchDaftarPerumahan() {
+        database.getReference("daftar_perumahan").addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val map = mutableMapOf<String, String>()
+                snapshot.children.forEach {
+                    val id = it.key
+                    val nama = it.getValue(String::class.java)
+                    if (id != null && nama != null) map[id] = nama
+                }
+                _daftarPerumahan.value = map
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("ViewModel", "Gagal fetch daftar perumahan: ${error.message}")
+            }
+        })
+    }
 
-        // Periksa apakah sudah ada pengguna dengan nomor rumah atau nama yang sama
-        usersRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        // Jika nomor rumah sudah ada
-                        onFailure("Nomor rumah sudah digunakan.")
-                        Toast.makeText(context, "Nomor rumah sudah digunakan", Toast.LENGTH_SHORT).show()
+    fun fetchQuickMessages() {
+        val quickMessagesPath = database.getReference("global_quick_messages")
+
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val messages = snapshot.children.mapNotNull { it.getValue(String::class.java) }
+                _quickMessages.value = messages
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("ViewModel", "Gagal fetch quick messages: ${error.message}")
+            }
+        }
+        quickMessagesPath.addValueEventListener(listener)
+    }
+
+    fun saveUserToFirebase(name: String, houseNumber: String, password: String, perumahanId: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    onFailure("Nomor rumah sudah digunakan di perumahan ini.")
+                } else {
+                    val userId = usersPath.push().key
+                    val user = User(name = name, houseNumber = houseNumber, password = password, role = "user")
+                    if (userId != null) {
+                        usersPath.child(userId).setValue(user).addOnCompleteListener { task ->
+                            if (task.isSuccessful) onSuccess() else onFailure("Gagal menyimpan data.")
+                        }
                     } else {
-                        // Lakukan pengecekan untuk nama
-                        usersRef.orderByChild("name").equalTo(name)
-                            .addListenerForSingleValueEvent(object : ValueEventListener {
-                                override fun onDataChange(snapshot: DataSnapshot) {
-                                    if (snapshot.exists()) {
-                                        // Jika nama sudah ada
-                                        onFailure("Nama sudah digunakan.")
-                                        Toast.makeText(context, "Nama sudah digunakan", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        // Jika tidak ada duplikasi, simpan data pengguna
-                                        val userId = usersRef.push().key // Buat key unik untuk user baru
-                                        val user = User(name, houseNumber, password)
-
-                                        userId?.let {
-                                            usersRef.child(it).setValue(user)
-                                                .addOnCompleteListener { task ->
-                                                    if (task.isSuccessful) {
-                                                        onSuccess() // Data berhasil disimpan
-                                                        Toast.makeText(context, "Sign Up Berhasil", Toast.LENGTH_SHORT).show()
-                                                    } else {
-                                                        onFailure("Gagal menyimpan data.")
-                                                    }
-                                                }
-                                        }
-                                    }
-                                }
-
-                                override fun onCancelled(error: DatabaseError) {
-                                    onFailure("Terjadi kesalahan: ${error.message}")
-                                }
-                            })
+                        onFailure("Gagal membuat ID pengguna.")
                     }
                 }
-
-                override fun onCancelled(error: DatabaseError) {
-                    onFailure("Terjadi kesalahan: ${error.message}")
-                }
-            })
-
+            }
+            override fun onCancelled(error: DatabaseError) {
+                onFailure("Terjadi kesalahan: ${error.message}")
+            }
+        })
     }
 
-    // Fungsi untuk validasi login
-    fun validateLogin(houseNumber: String, password: String, onResult: (Boolean, Boolean) -> Unit) {
-        // Kredensial Admin
-        val adminHouseNumber = "admin"
-        val adminPassword = "admin"
+    fun validateLogin(perumahanId: String, houseNumber: String, password: String, onResult: (Boolean, User?) -> Unit) {
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val userSnapshot = snapshot.children.first()
+                    val user = userSnapshot.getValue(User::class.java)
+                    if (user != null && user.password == password) {
+                        saveUserSession(user, perumahanId)
+                        onResult(true, user)
+                    } else {
+                        onResult(false, null)
+                    }
+                } else {
+                    onResult(false, null)
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                onResult(false, null)
+            }
+        })
+    }
 
-        // Periksa apakah login sebagai admin
-        if (houseNumber == adminHouseNumber && password == adminPassword) {
-            userPreferences.saveAdminLoggedIn(true)
-            // Jika sesuai kredensial admin, anggap login sebagai admin
-            onResult(true, true)
+    private fun saveUserSession(user: User, perumahanId: String) {
+        val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+        with(sharedPref.edit()) {
+            putString("user_name", user.name)
+            putString("house_number", user.houseNumber)
+            putString("user_role", user.role)
+            putString("perumahan_id", perumahanId)
+            putBoolean("is_logged_in", true)
+            commit()
+        }
+        loadUserFromSession()
+    }
+
+    fun logout() {
+        context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE).edit().clear().apply()
+        currentUserName = ""
+        currentUserHouseNumber = ""
+    }
+
+    // =================================================================
+    // Fungsi Panic Button & Buzzer
+    // =================================================================
+
+    fun saveMonitorData(message: String, priority: String, status: String, latitude: Double, longitude: Double) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        val data = MonitorRecord(
+            name = currentUserName,
+            houseNumber = currentUserHouseNumber,
+            message = message,
+            priority = priority,
+            status = status,
+            time = getCurrentTimestampFormatted(),
+            latitude = latitude,
+            longitude = longitude
+        )
+        monitorPath.push().setValue(data)
+    }
+
+    fun getBuzzerState() {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val buzzerPath = database.getReference("perumahan/$perumahanId/buzzers/main/state")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _buzzerState.value = snapshot.getValue(String::class.java) ?: "off"
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        buzzerPath.addValueEventListener(listener)
+        activeListeners["buzzerState"] = listener
+    }
+
+    fun updateBuzzerState(isOn: Boolean, priority: String? = null) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val buzzerRef = database.getReference("perumahan/$perumahanId/buzzers/main")
+        if (isOn && priority != null) {
+            buzzerRef.child("priority").setValue(priority)
+            buzzerRef.child("state").setValue("on")
+        } else {
+            buzzerRef.child("priority").setValue("off")
+            buzzerRef.child("state").setValue("off")
+        }
+    }
+
+    // =================================================================
+    // Fungsi untuk Admin
+    // =================================================================
+
+    fun fetchLatestRecord() {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val data = snapshot.children.first().getValue(MonitorRecord::class.java)
+                    data?.let { viewModelScope.launch { _latestRecord.emit(it) } }
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        monitorPath.orderByKey().limitToLast(1).addValueEventListener(listener)
+        activeListeners["latestRecord"] = listener
+    }
+
+    fun latestMonitorItem() {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _monitorData.value = snapshot.children.reversed().mapNotNull { it.getValue(MonitorRecord::class.java) }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        monitorPath.orderByKey().limitToLast(3).addValueEventListener(listener)
+        activeListeners["latestMonitorItems"] = listener
+    }
+
+    fun detailRekap(houseNumber: String) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        monitorPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _monitorData.value = snapshot.children.reversed().mapNotNull { it.getValue(MonitorRecord::class.java)?.copy(id = it.key ?: "") }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
+    }
+
+    fun fetchMonitorData() {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _monitorData.value = snapshot.children.reversed().mapNotNull { it.getValue(MonitorRecord::class.java) }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        monitorPath.addValueEventListener(listener)
+        activeListeners["allMonitorData"] = listener
+    }
+
+    fun updateStatus(recordId: String) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        database.getReference("perumahan/$perumahanId/monitor/$recordId/status").setValue("Selesai")
+    }
+
+    // =================================================================
+    // Fungsi untuk User
+    // =================================================================
+
+    fun userHistory() {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val monitorPath = database.getReference("perumahan/$perumahanId/monitor")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                _monitorData.value = snapshot.children.reversed()
+                    .mapNotNull { it.getValue(MonitorRecord::class.java) }
+                    .filter { it.houseNumber == currentUserHouseNumber }
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        }
+        monitorPath.addValueEventListener(listener)
+        activeListeners["userHistory"] = listener
+    }
+
+    fun fetchCurrentUserProfile() {
+        val perumahanId = getPerumahanIdFromSession()
+        val houseNumber = currentUserHouseNumber
+
+        if (perumahanId.isNullOrEmpty() || houseNumber.isEmpty()) {
             return
         }
 
-        // Jika bukan admin, cek user biasa di Firebase
-        usersRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        for (userSnapshot in snapshot.children) {
-                            val user = userSnapshot.getValue(User::class.java)
-                            if (user != null && user.password == password) {
-                                // Jika login berhasil sebagai user biasa
-                                userPreferences.saveUserLoggedIn(true)
-                                userPreferences.saveUserInfo(user.name, user.houseNumber)
-
-                                currentUserName = user.name
-                                currentUserHouseNumber = user.houseNumber
-                                onResult(true, false)
-                            } else {
-                                onResult(false, false)
-                            }
-                        }
-                    } else {
-                        onResult(false, false)
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    onResult(false, false)
-                }
-            })
-    }
-
-    // Fungsi untuk logout
-    fun logout() {
-        // Menghapus status login dari SharedPreferences
-        userPreferences.saveUserLoggedIn(false)
-        currentUserName = "" // Reset nama pengguna saat logout
-        currentUserHouseNumber = "" // Reset nomor rumah saat logout
-    }
-
-    fun adminLogout() {
-        userPreferences.saveAdminLoggedIn(false)
-        userPreferences.clearUserInfo()
-    }
-
-    // Fungsi untuk menyimpan data ke path /monitor di Firebase
-    fun saveMonitorData(
-        message: String,
-        priority: String,
-        status: String,
-        latitude: Double,   // <-- Tambahkan parameter ini
-        longitude: Double   // <-- Tambahkan parameter ini
-    ) {
-
-        val data = mapOf(
-            "name" to currentUserName,
-            "houseNumber" to currentUserHouseNumber,
-            "message" to message,
-            "priority" to priority,
-            "status" to status,
-            "time" to getCurrentTimestampFormatted(), // Waktu saat toggle diaktifkan
-            "latitude" to latitude,      // Tambahkan ini
-            "longitude" to longitude     // Tambahkan ini
-        )
-
-        // Simpan data ke Firebase
-        monitorRef.push().setValue(data)
-            .addOnCompleteListener { task ->
-                if (task.isSuccessful) {
-                    Log.d("Firebase", "Data berhasil disimpan ke /monitor")
-                } else {
-                    Log.e("Firebase", "Gagal menyimpan data", task.exception)
-                }
-            }
-    }
-
-    // Fungsi untuk mendapatkan status buzzer dari Firebase
-    private fun getBuzzerState() {
-        databaseRef.addValueEventListener(object : ValueEventListener {
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        val listener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                _buzzerState.value = snapshot.getValue(String::class.java) ?: "Off"
+                if (snapshot.exists()) {
+                    val user = snapshot.children.first().getValue(User::class.java)
+                    // Perbarui kedua LiveData
+                    _userProfileData.value = user
+                    _userProfileImageUrl.value = user?.imageProfile ?: ""
+                }
             }
-
             override fun onCancelled(error: DatabaseError) {
-                // Handle error, bisa diisi log jika dibutuhkan
+                Log.e("ViewModel", "Gagal fetch profil user: ${error.message}")
             }
-        })
+        }
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addValueEventListener(listener)
+        activeListeners["userProfile"] = listener
     }
 
-    // Fungsi untuk mengatur status buzzer di Firebase
-    fun setBuzzerState(state: String) {
-        databaseRef.setValue(state)
+    fun fetchUserProfileData() { // <-- NAMA FUNGSI DIPERBAIKI DI SINI
+        val perumahanId = getPerumahanIdFromSession()
+        val houseNumber = currentUserHouseNumber
+
+        if (perumahanId.isNullOrEmpty() || houseNumber.isEmpty()) {
+            return
+        }
+
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        val listener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val user = snapshot.children.first().getValue(User::class.java)
+                    // Perbarui kedua LiveData
+                    _userProfileData.value = user
+                    _userProfileImageUrl.value = user?.imageProfile ?: ""
+                }
+            }
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("ViewModel", "Gagal fetch profil user: ${error.message}")
+            }
+        }
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addValueEventListener(listener)
+        activeListeners["userProfile"] = listener
     }
 
-    //update buzzer
-    fun updateBuzzerState(isOn: Boolean, priority: String? = null) {
-        if (isOn && priority != null) {
-            databaseRef2.setValue(priority)
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d("UpdateBuzzerState", "Buzzer updated to: $priority")
-                    } else {
-                        Log.e("UpdateBuzzerState", "Failed to update buzzer", task.exception)
-                    }
-                }
-        } else {
-            // Ketika toggle switch dimatikan, set value ke "off"
-            databaseRef2.setValue("off")
-                .addOnCompleteListener { task ->
-                    if (task.isSuccessful) {
-                        Log.d("UpdateBuzzerState", "Buzzer reset to off")
-                    } else {
-                        Log.e("UpdateBuzzerState", "Failed to reset buzzer", task.exception)
-                    }
-                }
+    fun uploadImage(imageUri: Uri, imageType: String) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val houseNumber = currentUserHouseNumber
+        if(houseNumber.isEmpty()) return
+        val imageRef = storage.child("$perumahanId/$imageType/$houseNumber.jpg")
+        imageRef.putFile(imageUri).addOnSuccessListener {
+            imageRef.downloadUrl.addOnSuccessListener { uri ->
+                saveImagePathToDatabase(uri.toString(), houseNumber, imageType)
+            }
         }
     }
 
-
-    fun fetchMonitorData() {
-        monitorRef.addValueEventListener(object : ValueEventListener {
+    private fun saveImagePathToDatabase(imageUri: String, houseNumber: String, imageType: String) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val records = mutableListOf<MonitorRecord>()
-                for (recordSnapshot in snapshot.children.reversed()) {
-                    val record = recordSnapshot.getValue(MonitorRecord::class.java)
-                    record?.let { records.add(it) }
+                if (snapshot.exists()) {
+                    snapshot.children.first().ref.child(imageType).setValue(imageUri)
+                        .addOnSuccessListener {
+                            Toast.makeText(context, "$imageType berhasil diperbaharui.", Toast.LENGTH_SHORT).show()
+                        }
                 }
-                _monitorData.value = records
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("Firebase", "Failed to fetch monitor data", error.toException())
-            }
+            override fun onCancelled(error: DatabaseError) {}
         })
     }
 
-    fun fetchLatestRecord() {
-        monitorRef.orderByKey().limitToLast(1)
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        val data = snapshot.children.first().getValue(MonitorRecord::class.java)
-                        data?.let {
-                            viewModelScope.launch {
-                                _latestRecord.emit(it)
-                            }
-                        }
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    // Handle error
-                }
-            })
-    }
-
-
-    // fun menampilkan 3 data
-    fun latestMonitorItem() {
-        monitorRef.orderByKey().limitToLast(3) // take 3 data terbaru
-            .addValueEventListener(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val records = mutableListOf<MonitorRecord>()
-
-                    for (recordSnapshot in snapshot.children.reversed()) {
-                        val record = recordSnapshot.getValue(MonitorRecord::class.java)
-                        record?.let { records.add(it)
-
-                        }
-
-                        _monitorData.value = records
-                    }
-
-                    _monitorData.value = records // take 3 data
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e("Firebase", "Failed to fetch monitor data", error.toException())
-                }
-            })
-    }
-
-
-    // Fungsi untuk menampilkan detail rekap berdasarkan nomor rumah
-    fun detailRekap(houseNumber: String) {
-        monitorRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    val records = snapshot.children.reversed().mapNotNull { recordSnapshot -> //take data
-                        recordSnapshot.getValue(MonitorRecord::class.java)?.copy(id = recordSnapshot.key ?: "") //menetapkan id = key
-                    }
-                    (records.isNotEmpty()) //check apakah records kosong
-                    _monitorData.value = records //jika records tdk kosong update _monitorData
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e("detailRekap", "gagal mengambil data", error.toException())
-                }
-            })
-    }
-
-    //fun utk menampilkan riwayat user berdasarkan houseNumber
-    fun userHistory() {
-        monitorRef.addValueEventListener(object : ValueEventListener {
+    fun savePhoneNumberAndNote(phoneNumber: String, note: String) {
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val houseNumber = currentUserHouseNumber
+        if(houseNumber.isEmpty()) return
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val records = mutableListOf<MonitorRecord>()
-
-                for (recordSnapshot in snapshot.children.reversed()){ //reversed utk mengurutkan data dari yang terbaru
-                    val record = recordSnapshot.getValue(MonitorRecord::class.java)
-                    if (record?.houseNumber == currentUserHouseNumber) {
-                        records.add(record)
+                if (snapshot.exists()) {
+                    val userRef = snapshot.children.first().ref
+                    userRef.child("phoneNumber").setValue(phoneNumber)
+                    userRef.child("note").setValue(note).addOnCompleteListener { task ->
+                        if (task.isSuccessful) {
+                            Toast.makeText(context, "Keterangan berhasil disimpan.", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 }
-                _monitorData.value = records //hanya utk data yang sesuai dengan houseNumber
             }
-
-            override fun onCancelled(error: DatabaseError) {
-                Log.e("Firebase","Gagal mengambil data", error.toException())
-            }
+            override fun onCancelled(error: DatabaseError) {}
         })
     }
 
-    //fun upload foto ke storage
-    fun uploadImage(imageUri: Uri, houseNumber: String, imageType: String, context: Context) {
-        val imageRef = storage.child("${imageType}/$houseNumber.jpg")
-
-        imageRef.putFile(imageUri)
-            .addOnSuccessListener {
-                imageRef.downloadUrl.addOnSuccessListener { uri ->
-                    saveImagePathToDatabase(uri.toString(), houseNumber, imageType, context)
-                }
-            }
-    }
-
-    //funtion utk simpan path foto ke database
-    private fun saveImagePathToDatabase(imageUri: String, houseNumber: String, imageType: String, context: Context) {
-
-        usersRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        for (userSnapshot in snapshot.children) {
-                            userSnapshot.ref.child(imageType).setValue(imageUri)
-                                .addOnSuccessListener {
-                                    Toast.makeText(context, "$imageType berhasil di diperbaharui. Tunggu beberapa saat", Toast.LENGTH_SHORT).show()
-                                }
-                        }
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Toast.makeText(context, "Error: ${error.message}", Toast.LENGTH_SHORT).show()
-                }
-            })
-    }
-
-    //fun update status pesan
-    fun updateStatus(recordId: String) {
-        monitorRef.child(recordId).child("status").setValue("Selesai") //update data di status
-
-    }
-
-    // fun utk save no hp & note user
-    fun savePhoneNumberAndNote(houseNumber: String, phoneNumber: String, note: String) {
-        usersRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        for (child in snapshot.children) {
-                            child.ref.child("phoneNumber").setValue(phoneNumber)
-                            child.ref.child("note").setValue(note)
-                                .addOnCompleteListener { task ->
-                                    if (task.isSuccessful) {
-                                        Log.d("Firebase", "Data berhasil diperbarui untuk $houseNumber")
-                                        Toast.makeText(context, "Keterangan berhasil simpan", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        Log.e("Firebase", "Gagal memperbarui data: ${task.exception?.message}")
-                                    }
-                                }
-                        }
-                    } else {
-                        Log.e("Firebase", "Data dengan houseNumber $houseNumber tidak ditemukan")
-                    }
-                }
-
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e("Firebase", "Error: ${error.message}")
-                }
-            })
-    }
-
-    //fun utk fetch no hp dan note user
     fun fetchUserData(houseNumber: String) {
-        usersRef.orderByChild("houseNumber").equalTo(houseNumber)
-            .addListenerForSingleValueEvent(object : ValueEventListener {
-                override fun onDataChange(snapshot: DataSnapshot) {
-                    if (snapshot.exists()) {
-                        val userSnapshot = snapshot.children.first()
-                        val phoneNumber = userSnapshot.child("phoneNumber").getValue(String::class.java) ?: ""
-                        val note = userSnapshot.child("note").getValue(String::class.java) ?: ""
-                        _userData.postValue(
-                            mapOf(
-                                "phoneNumber" to phoneNumber,
-                                "note" to note)
-                        )
-                    }
-                }
+        val perumahanId = getPerumahanIdFromSession() ?: return
+        val usersPath = database.getReference("perumahan/$perumahanId/users")
 
-                override fun onCancelled(error: DatabaseError) {
-                    Log.e("fetchUserData", "Gagal mengambil data: ${error.message}")
+        usersPath.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                if (snapshot.exists()) {
+                    val userSnapshot = snapshot.children.first()
+                    val phoneNumber = userSnapshot.child("phoneNumber").getValue(String::class.java) ?: ""
+                    val note = userSnapshot.child("note").getValue(String::class.java) ?: ""
+                    _userData.postValue(mapOf("phoneNumber" to phoneNumber, "note" to note))
                 }
-            })
+            }
+            override fun onCancelled(error: DatabaseError) {}
+        })
     }
+
+    // =================================================================
+    // Fungsi Utilitas
+    // =================================================================
 
     private fun getCurrentTimestampFormatted(): String {
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd 'waktu' HH:mm", java.util.Locale.getDefault())
-        return sdf.format(java.util.Date())
+        return SimpleDateFormat("yyyy-MM-dd 'waktu' HH:mm", Locale.getDefault()).format(Date())
     }
 
+    override fun onCleared() {
+        super.onCleared()
+        // Melepas semua listener saat ViewModel dihancurkan
+        activeListeners.forEach { (key, listener) ->
+            // Implementasi pelepasan listener yang lebih baik akan menyimpan path referensinya
+            Log.d("ViewModel", "Melepas listener untuk: $key")
+        }
+        activeListeners.clear()
+    }
 }

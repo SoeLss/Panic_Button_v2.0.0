@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android">
-
-</PreferenceScreen>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:updatePeriodMillis="86400000"
+    android:previewLayout="@layout/widget_panic_button_preview"
+    android:resizeMode="none"
+    android:widgetCategory="home_screen"
+    android:description="@string/panic_widget_description" />

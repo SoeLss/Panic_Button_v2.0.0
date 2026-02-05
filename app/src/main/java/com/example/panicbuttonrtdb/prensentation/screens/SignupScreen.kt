@@ -20,12 +20,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,6 +52,7 @@ import com.example.panicbuttonrtdb.prensentation.components.OutlinedTextFieldPas
 import com.example.panicbuttonrtdb.viewmodel.ViewModel
 import com.example.panicbuttonrtdb.viewmodel.ViewModelFactory
 
+@OptIn(ExperimentalMaterial3Api::class) // <-- TAMBAHAN BARU
 @Composable
 fun SignUpScreen(
     modifier : Modifier = Modifier,
@@ -59,6 +66,18 @@ fun SignUpScreen(
     val (password, setPassword) = remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") } // Untuk pesan error
+
+    // <-- AWAL BLOK TAMBAHAN BARU: State untuk dropdown perumahan -->
+    var selectedPerumahanId by remember { mutableStateOf("") }
+    var selectedPerumahanName by remember { mutableStateOf("Pilih Perumahan") }
+    val daftarPerumahan by viewModel.daftarPerumahan.observeAsState(initial = emptyMap())
+    var expanded by remember { mutableStateOf(false) }
+
+    // <-- Ambil data perumahan saat layar pertama kali dibuka -->
+    LaunchedEffect(Unit) {
+        viewModel.fetchDaftarPerumahan()
+    }
+    // <-- AKHIR BLOK TAMBAHAN BARU -->
 
     Column(
         modifier
@@ -133,6 +152,59 @@ fun SignUpScreen(
                     )
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // <-- AWAL BLOK TAMBAHAN BARU: Dropdown untuk memilih perumahan -->
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedPerumahanName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Perumahan") },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_home), // Ganti dengan ikon yang sesuai
+                                    contentDescription = "ic perumahan",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colorResource(id = R.color.font),
+                                focusedLabelColor = colorResource(id = R.color.font),
+                                focusedLeadingIconColor = colorResource(id = R.color.font),
+                                unfocusedLeadingIconColor = colorResource(id = R.color.defauld),
+                                cursorColor = colorResource(id = R.color.font)
+                            )
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            daftarPerumahan.forEach { (perumahanId, perumahanNama) ->
+                                DropdownMenuItem(
+                                    text = { Text(perumahanNama) },
+                                    onClick = {
+                                        selectedPerumahanId = perumahanId
+                                        selectedPerumahanName = perumahanNama
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // <-- AKHIR BLOK TAMBAHAN BARU -->
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
                     OutlinedTextField(
                         value = houseNumber,
                         onValueChange = {houseNumber = it},
@@ -166,15 +238,20 @@ fun SignUpScreen(
 
                     Button(
                         onClick = {
-                            if (name.isNotEmpty() && houseNumber.isNotEmpty() && password.isNotEmpty()) {
+                            // <-- KONDISI IF DIPERBARUI -->
+                            if (name.isNotEmpty() && houseNumber.isNotEmpty() && password.isNotEmpty() && selectedPerumahanId.isNotEmpty()) {
                                 isLoading = true
                                 errorMessage = ""  // Reset pesan error
+
+                                // <-- PEMANGGILAN FUNGSI DIPERBARUI -->
                                 viewModel.saveUserToFirebase(
                                     name = name,
                                     houseNumber = houseNumber,
                                     password = password,
+                                    perumahanId = selectedPerumahanId, // <-- KIRIM ID PERUMAHAN
                                     onSuccess = {
                                         isLoading = false
+                                        Toast.makeText(context, "Pendaftaran berhasil!", Toast.LENGTH_SHORT).show()
                                         navController.navigate("login")  // Navigasi ke login jika berhasil
                                     },
                                     onFailure = { error ->
@@ -183,8 +260,9 @@ fun SignUpScreen(
                                     }
                                 )
                             } else {
-                                errorMessage = "Semua kolom harus diisi."
-                                Toast.makeText(context, "Mohon isi semua kolom", Toast.LENGTH_SHORT).show()
+                                // <-- PESAN ERROR DIPERBARUI -->
+                                errorMessage = "Semua kolom harus diisi, termasuk perumahan."
+                                Toast.makeText(context, "Mohon isi semua kolom, termasuk perumahan", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier
@@ -221,4 +299,3 @@ fun SignUpScreen(
         }
     }
 }
-

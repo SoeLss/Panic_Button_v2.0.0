@@ -8,6 +8,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
@@ -44,7 +45,7 @@ fun OutlinedTextFieldPassword(
         keyboardOptions = KeyboardOptions(
             imeAction = ImeAction.Done
         ),
-        colors = TextFieldDefaults.outlinedTextFieldColors(
+        colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = colorResource(id = R.color.font),
             focusedLabelColor = colorResource(id = R.color.font),
             focusedLeadingIconColor = colorResource(id = R.color.font),

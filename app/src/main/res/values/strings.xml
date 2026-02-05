@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">Panic Button</string>
     <string name="userInformation">Isi informasi tentang rumah anda</string>
+    <string name="panic_widget_description">Tombol darurat untuk mengirim sinyal panik dari layar utama.</string>
 </resources>

@@ -176,14 +176,18 @@ fun SearchDataRekap(
                         style = TextStyle(lineHeight = 20.sp)
                     )
                 },
-                colors = TextFieldDefaults.textFieldColors(
-                    containerColor = Color.Transparent,
+                colors = TextFieldDefaults.colors(
+                    // Di Material 3, containerColor dipisah per-kondisi
+                    focusedContainerColor = Color.Transparent,
+                    unfocusedContainerColor = Color.Transparent,
+                    disabledContainerColor = Color.Transparent,
+
+                    // Parameter lainnya sebagian besar sama
                     focusedIndicatorColor = Color.Transparent,
                     unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
                     focusedTextColor = colorResource(id = R.color.font2),
-                    unfocusedTextColor = colorResource(id = R.color.font2),
-                    disabledIndicatorColor = Color.Transparent
-
+                    unfocusedTextColor = colorResource(id = R.color.font2)
                 ),
                 singleLine = true,
                 modifier = Modifier

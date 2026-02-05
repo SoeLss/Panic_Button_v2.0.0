@@ -14,15 +14,14 @@
 
 
     <application
+        android:name=".PanicButtonApplication"
         android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.PanicButtonRtdb"
-        tools:targetApi="31">
+        android:theme="@style/Theme.PanicButtonRtdb">
+
         <meta-data
             android:name="com.google.android.geo.API_KEY"
             android:value="AIzaSyCuDBc2do22fGS2JEN5zR3jSUmGRwDLNDU"/>
@@ -42,6 +41,16 @@
             android:label="@string/app_name"
             android:theme="@style/Theme.PanicButtonRtdb">
         </activity>
+        <receiver
+            android:name=".widget.PanicButtonWidgetReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/panic_button_widget_info" />
+        </receiver>
     </application>
 
 </manifest>

@@ -7,12 +7,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.example.panicbuttonrtdb.data.User
 import com.example.panicbuttonrtdb.prensentation.components.OnBoarding
 import com.example.panicbuttonrtdb.prensentation.screens.UserProfileScreen
 import com.example.panicbuttonrtdb.prensentation.screens.DetailRekapScreen
@@ -27,32 +24,36 @@ import com.example.panicbuttonrtdb.viewmodel.ViewModelFactory
 
 @Composable
 fun MainApp() {
-    val context = LocalContext.current // Dapatkan konteks
-    val viewModel: ViewModel = viewModel(factory = ViewModelFactory(context)) // Inisialisasi ViewModel
+    val context = LocalContext.current
+    val viewModel: ViewModel = viewModel(factory = ViewModelFactory(context))
     val sharedPreferences = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val isOnboardingShown = sharedPreferences.getBoolean("OnBoardingShown", false)
 
     val navController = rememberNavController()
 
+    // <-- AWAL BLOK PERUBAHAN: Logika startDestination diperbarui -->
+    val isOnboardingShown = sharedPreferences.getBoolean("OnBoardingShown", false)
+    val isLoggedIn = sharedPreferences.getBoolean("is_logged_in", false)
+    val userRole = sharedPreferences.getString("user_role", null)
 
-    // Cek status login
     val startDestination = when {
         !isOnboardingShown -> "onboarding"
-        viewModel.isAdminLoggedIn() -> "dashboard_admin"
-        viewModel.isUserLoggedIn() -> "dashboard"
+        isLoggedIn -> {
+            if (userRole == "admin") "dashboard_admin" else "dashboard"
+        }
         else -> "login"
     }
+    // <-- AKHIR BLOK PERUBAHAN -->
 
     NavHost(navController = navController, startDestination = startDestination) {
-        
+
         //onBoarding
         composable("onboarding") {
             OnBoarding(navController = navController)
             LaunchedEffect(Unit) {
-                sharedPreferences.edit().putBoolean("OnBoardingShown", true).apply()
+                sharedPreferences.edit().putBoolean("OnBoardingShown", true).commit()
             }
         }
-        
+
         // Halaman Sign Up
         composable("signup") {
             SignUpScreen(
@@ -65,7 +66,7 @@ fun MainApp() {
         composable("login") {
             LoginScreen(
                 navController = navController,
-                viewModel = viewModel, // Mengoper ViewModel ke LoginScreen
+                viewModel = viewModel,
                 context = context
             )
         }
@@ -77,8 +78,11 @@ fun MainApp() {
                 viewModel = viewModel,
                 navController = navController,
                 onLogout = {
-                    viewModel.logout() // Panggil fungsi logout dari ViewModel
-                    navController.navigate("login") // Navigasi kembali ke layar login
+                    viewModel.logout()
+                    // Navigasi kembali ke layar login dan hapus backstack
+                    navController.navigate("login") {
+                        popUpTo(0)
+                    }
                 }
             )
         }
@@ -89,8 +93,12 @@ fun MainApp() {
                 navController = navController,
                 viewModel = viewModel,
                 onLogout = {
-                    viewModel.adminLogout()
-                    navController.navigate("login")
+                    // <-- PERUBAHAN: adminLogout() diganti menjadi logout() -->
+                    viewModel.logout()
+                    // Navigasi kembali ke layar login dan hapus backstack
+                    navController.navigate("login") {
+                        popUpTo(0)
+                    }
                 }
             )
         }
@@ -127,5 +135,3 @@ fun MainApp() {
         }
     }
 }
-
-

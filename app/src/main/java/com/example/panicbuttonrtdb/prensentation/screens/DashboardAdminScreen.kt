@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -55,6 +56,12 @@ fun DashboardAdminScreen(
 ) {
     val buzzerState by viewModel.buzzerState.observeAsState("off")
     var showDialog by remember { mutableStateOf(false) } // State untuk menampilkan dialog
+
+    LaunchedEffect(Unit) {
+        viewModel.getBuzzerState()
+        viewModel.fetchLatestRecord() // Untuk MonitorItem utama
+        viewModel.latestMonitorItem() // Untuk daftar data terbaru
+    }
 
     BackHandler { //jika tombol back ditekan maka akan menutup activity
         (context as? Activity)?. finish()

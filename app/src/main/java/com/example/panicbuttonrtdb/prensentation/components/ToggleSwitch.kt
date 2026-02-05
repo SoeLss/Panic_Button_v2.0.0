@@ -48,11 +48,12 @@ import com.example.panicbuttonrtdb.viewmodel.ViewModel
 import kotlinx.coroutines.delay
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.ExperimentalLayoutApi // <-- IMPORT BARU
-import androidx.compose.foundation.layout.FlowRow // <-- IMPORT BARU
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import com.example.panicbuttonrtdb.utils.getCurrentLocation // Import fungsi utilitas
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import com.example.panicbuttonrtdb.utils.getCurrentLocation
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -60,22 +61,18 @@ fun ToggleSwitch(
     viewModel: ViewModel,
     context: Context
 ) {
-
-
-    var showDialog by remember { mutableStateOf(false) } // State untuk menampilkan dialog
-    var pendingToggleState by remember { mutableStateOf(false) } // State untuk menyimpan toggle sementara
+    var showDialog by remember { mutableStateOf(false) }
+    var pendingToggleState by remember { mutableStateOf(false) }
     var selectedPriority by remember { mutableStateOf("Darurat") }
-    val buzzerState by viewModel.buzzerState.observeAsState(initial = "Off")
+    val buzzerState by viewModel.buzzerState.observeAsState(initial = "off") // <-- ubah ke "off" agar konsisten
     var message by remember { mutableStateOf("") }
     var showError by remember {mutableStateOf(false)}
     var isLoading by remember { mutableStateOf(false) }
 
-    // 1. Buat Launcher untuk meminta izin
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
         onResult = { permissions ->
             if (permissions.getOrDefault(android.Manifest.permission.ACCESS_FINE_LOCATION, false)) {
-                // Izin diberikan, panggil fungsi untuk mendapatkan lokasi dan kirim data
                 isLoading = true
                 getCurrentLocation(context) { lat, lon ->
                     viewModel.saveMonitorData(
@@ -85,11 +82,12 @@ fun ToggleSwitch(
                         latitude = lat,
                         longitude = lon
                     )
-                    viewModel.setBuzzerState("on")
+                    // Panggil updateBuzzerState saja
                     viewModel.updateBuzzerState(
                         isOn = true,
                         priority = selectedPriority
                     )
+                    // viewModel.setBuzzerState("on") // <-- DIHAPUS
                     sendNotification(
                         context,
                         "Panic Button",
@@ -99,12 +97,10 @@ fun ToggleSwitch(
                     isLoading = false
                 }
             } else {
-                // Izin ditolak, beri tahu user
                 Toast.makeText(context, "Izin lokasi dibutuhkan untuk fitur ini", Toast.LENGTH_SHORT).show()
             }
         }
     )
-
 
     Column(
         modifier = Modifier
@@ -113,16 +109,19 @@ fun ToggleSwitch(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-
         Switch(
             checked = buzzerState == "on",
             onCheckedChange = { isChecked ->
                 if (isChecked) {
+                    message = ""
+                    selectedPriority = "Darurat"
+
                     pendingToggleState = true
                     showDialog = true
                 } else {
+                    // Panggil updateBuzzerState saja
                     viewModel.updateBuzzerState(false)
-                    viewModel.setBuzzerState("off")
+                    // viewModel.setBuzzerState("off") // <-- DIHAPUS
                 }
             },
             thumbContent = {
@@ -158,16 +157,19 @@ fun ToggleSwitch(
                 .padding(20.dp)
         )
     }
+
     if (buzzerState == "on") {
         LaunchedEffect(key1 = buzzerState) {
-            delay(30000)
-            viewModel.setBuzzerState("off")
+            delay(20000)
+            // Panggil updateBuzzerState saja
             viewModel.updateBuzzerState(isOn = false)
+            // viewModel.setBuzzerState("off") // <-- DIHAPUS
         }
     }
+
     if (showDialog) {
         AlertDialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { if (!isLoading) showDialog = false }, // Cegah dialog ditutup saat loading
             title = {
                 Row(
                     modifier = Modifier
@@ -189,21 +191,20 @@ fun ToggleSwitch(
                 }
             },
             text = {
-                val quickMessages = listOf("Kebakaran", "Bantuan Medis", "Kerumunan Tidak Wajar", "Hewan Berbahaya", "Tolong Segera Datang")
+                val quickMessages by viewModel.quickMessages.observeAsState(emptyList())
                 Column {
                     Text(
                         "Tambahkan Pesan dan Prioritas",
                         color = colorResource(id = R.color.font2)
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Spacer(modifier = Modifier.height(16.dp)) // <-- BARU
+                    Spacer(modifier = Modifier.height(16.dp))
 
-                    Text("Quick Massage:", fontSize = 12.sp, color = colorResource(id = R.color.font2)) // <-- BARU
-                    Spacer(modifier = Modifier.height(4.dp)) // <-- BARU
+                    Text("Pesan Cepat:", fontSize = 12.sp, color = colorResource(id = R.color.font2))
+                    Spacer(modifier = Modifier.height(4.dp))
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp), // Jarak antar tombol
-                        verticalArrangement = Arrangement.spacedBy(4.dp)   // Jarak jika ada baris baru
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         quickMessages.forEach { quickMsg ->
                             Button(
@@ -224,7 +225,7 @@ fun ToggleSwitch(
                         onValueChange = { message = it },
                         label = { Text(text = "Tambahkan Pesan", color = colorResource(id = R.color.font2)) },
                         placeholder = { Text( "Opsional", color = colorResource(id = R.color.font3)) },
-                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                        colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorResource(id = R.color.font),
                             focusedLabelColor = colorResource(id = R.color.font),
                             cursorColor = colorResource(id = R.color.font)
@@ -248,6 +249,7 @@ fun ToggleSwitch(
             containerColor = Color.White,
             confirmButton = {
                 Button(
+                    enabled = !isLoading, // Matikan tombol saat loading
                     modifier = Modifier
                         .width(130.dp),
                     onClick = {
@@ -258,8 +260,6 @@ fun ToggleSwitch(
                             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
                             vibrator.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
 
-                            // Cukup panggil launcher untuk meminta izin.
-                            // Sisanya akan diurus oleh onResult dari launcher.
                             locationPermissionLauncher.launch(arrayOf(
                                 android.Manifest.permission.ACCESS_FINE_LOCATION,
                                 android.Manifest.permission.ACCESS_COARSE_LOCATION
@@ -278,6 +278,7 @@ fun ToggleSwitch(
             },
             dismissButton = {
                 Button(
+                    enabled = !isLoading, // Matikan tombol saat loading
                     modifier = Modifier
                         .width(130.dp),
                     onClick = { showDialog = false },

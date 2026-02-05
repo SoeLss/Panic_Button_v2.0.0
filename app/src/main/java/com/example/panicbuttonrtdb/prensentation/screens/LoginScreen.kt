@@ -18,17 +18,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -38,8 +43,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -51,6 +54,7 @@ import com.example.panicbuttonrtdb.prensentation.components.OutlinedTextFieldPas
 import com.example.panicbuttonrtdb.viewmodel.ViewModel
 import com.example.panicbuttonrtdb.viewmodel.ViewModelFactory
 
+@OptIn(ExperimentalMaterial3Api::class) // <-- TAMBAHAN BARU
 @Composable
 fun LoginScreen(
     context: Context,
@@ -65,6 +69,18 @@ fun LoginScreen(
     var houseNumber by remember { mutableStateOf("") }
     val (password, setPassword) = remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }  // Indikator loading
+
+    // <-- AWAL BLOK TAMBAHAN BARU: State untuk dropdown perumahan -->
+    var selectedPerumahanId by remember { mutableStateOf("") }
+    var selectedPerumahanName by remember { mutableStateOf("Pilih Perumahan") }
+    val daftarPerumahan by viewModel.daftarPerumahan.observeAsState(initial = emptyMap())
+    var expanded by remember { mutableStateOf(false) }
+
+    // <-- Ambil data perumahan saat layar pertama kali dibuka -->
+    LaunchedEffect(Unit) {
+        viewModel.fetchDaftarPerumahan()
+    }
+    // <-- AKHIR BLOK TAMBAHAN BARU -->
 
     Column(
         modifier
@@ -110,9 +126,61 @@ fun LoginScreen(
                         fontSize = 36.sp,
                         fontWeight = FontWeight.Bold,
                         color = colorResource(id = R.color.font),
-
                     )
                     Spacer(modifier = Modifier.height(44.dp))
+
+                    // <-- AWAL BLOK TAMBAHAN BARU: Dropdown untuk memilih perumahan -->
+                    ExposedDropdownMenuBox(
+                        expanded = expanded,
+                        onExpandedChange = { expanded = !expanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedPerumahanName,
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Perumahan") },
+                            modifier = Modifier
+                                .menuAnchor()
+                                .fillMaxWidth(),
+                            leadingIcon = {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_home), // Ganti dengan ikon yang sesuai
+                                    contentDescription = "ic perumahan",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+                            },
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = colorResource(id = R.color.font),
+                                focusedLabelColor = colorResource(id = R.color.font),
+                                focusedLeadingIconColor = colorResource(id = R.color.font),
+                                unfocusedLeadingIconColor = colorResource(id = R.color.defauld),
+                                cursorColor = colorResource(id = R.color.font)
+                            )
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false }
+                        ) {
+                            daftarPerumahan.forEach { (perumahanId, perumahanNama) ->
+                                DropdownMenuItem(
+                                    text = { Text(perumahanNama) },
+                                    onClick = {
+                                        selectedPerumahanId = perumahanId
+                                        selectedPerumahanName = perumahanNama
+                                        expanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    // <-- AKHIR BLOK TAMBAHAN BARU -->
+
+                    Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = houseNumber,
                         onValueChange = {houseNumber = it},
@@ -144,27 +212,31 @@ fun LoginScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
+                    // <-- BAGIAN INI DIUBAH TOTAL -->
                     Button(
                         onClick = {
-                            if (houseNumber.isNotEmpty() && password.isNotEmpty()) {
+                            if (selectedPerumahanId.isNotEmpty() && houseNumber.isNotEmpty() && password.isNotEmpty()) {
                                 isLoading = true
 
-                                viewModel.validateLogin(houseNumber, password) { success, isAdmin ->
+                                viewModel.validateLogin(
+                                    perumahanId = selectedPerumahanId,
+                                    houseNumber = houseNumber,
+                                    password = password
+                                ) { success, user ->
                                     isLoading = false
-                                    if (success) {
-                                        if (isAdmin) {
-                                            // Navigasi ke Dashboard Admin jika login sebagai admin
+                                    if (success && user != null) {
+                                        // Navigasi berdasarkan role
+                                        if (user.role == "admin") {
                                             navController.navigate("dashboard_admin")
                                         } else {
-                                            // Navigasi ke Dashboard User jika login sebagai user biasa
                                             navController.navigate("dashboard")
                                         }
                                     } else {
-                                        Toast.makeText(context, "Nomor rumah atau Sandi salah", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(context, "Login Gagal. Periksa kembali data Anda.", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             } else {
-                                Toast.makeText(context,"Mohon isi semua kolom", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context,"Mohon isi semua kolom, termasuk perumahan", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier

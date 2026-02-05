@@ -30,7 +30,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -39,25 +38,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.panicbuttonrtdb.R
 import com.example.panicbuttonrtdb.viewmodel.ViewModel
-import kotlinx.coroutines.delay
 
 @Composable
 fun UserInformation(
     modifier: Modifier = Modifier,
     viewModel: ViewModel
 ) {
-    val context = LocalContext.current
-    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val houseNumber = sharedPref.getString("house_number", "") ?: ""
+    // <-- Ambil data user dari ViewModel -->
     val userData by viewModel.userData.observeAsState(mapOf())
-    var phoneNumber by remember { mutableStateOf(userData["phoneNumber"] ?: "") }
-    var note by remember { mutableStateOf(userData["note"] ?: "") }
 
-    LaunchedEffect(houseNumber) {
-        while (true){
-            viewModel.fetchUserData(houseNumber)
-            delay(2000)
-        }
+    // <-- State untuk TextField, diupdate saat userData berubah -->
+    var phoneNumber by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+
+    // <-- LaunchedEffect ini akan mengupdate state TextField saat data dari ViewModel datang -->
+    LaunchedEffect(userData) {
+        phoneNumber = userData["phoneNumber"] ?: ""
+        note = userData["note"] ?: ""
+    }
+
+    // <-- Ambil data user saat composable pertama kali ditampilkan -->
+    LaunchedEffect(Unit) {
+        // Asumsi houseNumber diambil dari sesi di dalam ViewModel
+        viewModel.fetchUserData(viewModel.currentUserHouseNumber)
     }
 
     Surface(
@@ -83,7 +86,7 @@ fun UserInformation(
                         .wrapContentHeight()
                         .fillMaxWidth(),
                     value = phoneNumber,
-                    onValueChange = { phoneNumber = it},
+                    onValueChange = { phoneNumber = it },
                     leadingIcon = {
                         Icon(
                             painter = painterResource(id = R.drawable.ic_phonenumber),
@@ -93,7 +96,7 @@ fun UserInformation(
                     },
                     placeholder = {
                         Text(
-                            text = phoneNumber.ifEmpty { "Masukan No Hp Anda" },
+                            text = "Masukan No Hp Anda",
                             fontSize = 13.sp
                         )
                     },
@@ -136,7 +139,7 @@ fun UserInformation(
                     },
                     placeholder = {
                         Text(
-                            text = note.ifEmpty { "Masukan keterangan tentang rumah anda" },
+                            text = "Masukan keterangan tentang rumah anda",
                             fontSize = 13.sp
                         )
                     },
@@ -157,7 +160,8 @@ fun UserInformation(
 
     Button(
         onClick = {
-            viewModel.savePhoneNumberAndNote(houseNumber,phoneNumber, note)
+            // <-- PERBAIKAN: Hapus parameter 'houseNumber' -->
+            viewModel.savePhoneNumberAndNote(phoneNumber, note)
         },
         contentPadding = PaddingValues(8.dp),
         colors = ButtonDefaults.buttonColors(
@@ -188,14 +192,14 @@ fun UserInformationForAdmin(
     houseNumber: String
 ) {
     val userData by viewModel.userData.observeAsState(mapOf())
-    val phoneNumber by remember { mutableStateOf(userData["phoneNumber"] ?: "") }
-    val note by remember { mutableStateOf(userData["note"] ?: "") }
 
+    // <-- PERBAIKAN: Jangan gunakan 'remember', agar nilai selalu update dari 'userData' -->
+    val phoneNumber = userData["phoneNumber"] ?: ""
+    val note = userData["note"] ?: ""
+
+    // <-- PERBAIKAN: Hapus loop 'while(true)' agar tidak fetch berulang-ulang -->
     LaunchedEffect(houseNumber) {
-        while (true) {
-            viewModel.fetchUserData(houseNumber)
-            delay(2000)
-        }
+        viewModel.fetchUserData(houseNumber)
     }
 
     Surface(
@@ -220,7 +224,7 @@ fun UserInformationForAdmin(
                     modifier = Modifier
                         .wrapContentHeight()
                         .fillMaxWidth(),
-                    value = phoneNumber,
+                    value = phoneNumber, // <-- Nilai ini sekarang akan reaktif
                     onValueChange = { },
                     leadingIcon = {
                         Icon(
@@ -231,7 +235,7 @@ fun UserInformationForAdmin(
                     },
                     placeholder = {
                         Text(
-                            text = phoneNumber.ifEmpty { "Nomor Hp pengguna" },
+                            text = "Nomor Hp pengguna tidak tersedia",
                             fontSize = 13.sp
                         )
                     },
@@ -258,7 +262,7 @@ fun UserInformationForAdmin(
                     modifier = Modifier
                         .wrapContentHeight()
                         .fillMaxWidth(),
-                    value = note,
+                    value = note, // <-- Nilai ini sekarang akan reaktif
                     onValueChange = { },
                     leadingIcon = {
                         Icon(
@@ -267,9 +271,9 @@ fun UserInformationForAdmin(
                             tint = colorResource(id = R.color.font2)
                         )
                     },
-                    placeholder = { // tampilkan data note disini
+                    placeholder = {
                         Text(
-                            text = note.ifEmpty { "Keterangan rumah" },
+                            text = "Keterangan rumah tidak tersedia",
                             fontSize = 13.sp
                         )
                     },
@@ -285,5 +289,3 @@ fun UserInformationForAdmin(
         }
     }
 }
-
-

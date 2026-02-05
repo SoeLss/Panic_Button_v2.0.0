@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.2"
+        versionName = "2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -52,6 +52,12 @@ android {
 
 dependencies {
 
+    implementation(libs.androidx.glance.appwidget)
+    val composeBom = platform("androidx.compose:compose-bom:2025.05.00")
+    implementation(composeBom)
+    androidTestImplementation(composeBom)
+
+    implementation(platform(libs.firebase.bom))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
@@ -75,6 +81,7 @@ dependencies {
     implementation(libs.firebase.database)
     implementation(libs.androidx.runtime.livedata)
     implementation(libs.firebase.storage)
+    implementation(libs.firebase.messaging.ktx)
 
 
 
@@ -96,6 +103,13 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.6.0")
     implementation ("com.google.android.gms:play-services-location:21.2.0")
     implementation ("com.google.maps.android:maps-compose:4.3.3")
+    implementation("com.airbnb.android:lottie-compose:5.2.0")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("com.google.maps.android:maps-compose:4.3.3")
+    implementation("androidx.glance:glance-appwidget:1.1.0")
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
 
 
 }

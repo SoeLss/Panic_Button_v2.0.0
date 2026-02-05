@@ -33,9 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,14 +47,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.rememberImagePainter
 import com.example.panicbuttonrtdb.R
-import com.example.panicbuttonrtdb.data.User
-import com.example.panicbuttonrtdb.prensentation.components.UserInformation
 import com.example.panicbuttonrtdb.notification.openNotificationSettings
+import com.example.panicbuttonrtdb.prensentation.components.UserInformation
 import com.example.panicbuttonrtdb.viewmodel.ViewModel
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.ValueEventListener
+
 
 @Composable
 fun UserProfileScreen(
@@ -66,41 +60,35 @@ fun UserProfileScreen(
     viewModel: ViewModel
 ) {
 
-    val sharedPref = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    val houseNumber = sharedPref.getString("house_number", "") ?: ""
-    val databaseRef = FirebaseDatabase.getInstance().getReference("users")
-    val userName = sharedPref.getString("user_name", "nama user tidak ditemukan")
-    val nomorRumah = sharedPref.getString("house_number", "norum tidak ada")
-    var user by remember {mutableStateOf<User?>(null)}
+    // <-- Ambil data dari ViewModel, bukan dari SharedPreferences langsung -->
+    val userName = viewModel.currentUserName
+    val nomorRumah = viewModel.currentUserHouseNumber
+
+    // <-- Ambil data User dari LiveData di ViewModel -->
+    val user by viewModel.userProfileData.observeAsState(null)
+
     val emptyProfile = R.drawable.ic_empty_profile
     val emptyCover = R.drawable.empty_image
-    val profileImageUrl = if (user?.imageProfile.isNullOrEmpty()) emptyProfile else user?.imageProfile // jika null maka panggil emptyProfile jika ada maka panggil imageProfile di User
-    val coverImageUrl = if (user?.coverImage.isNullOrEmpty()) emptyCover else user?.coverImage // jika null maka panggil emptyCover jika ada maka panggil coverImage di User
+
+    // Logika untuk menampilkan gambar tetap sama
+    val profileImageUrl = if (user?.imageProfile.isNullOrEmpty()) emptyProfile else user?.imageProfile
+    val coverImageUrl = if (user?.coverImage.isNullOrEmpty()) emptyCover else user?.coverImage
+
+    // <-- Pemanggilan uploadImage diperbarui, tidak perlu 'context' dan 'houseNumber' -->
     val profileLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
-            viewModel.uploadImage(it, houseNumber, "profileImage", context)
+            viewModel.uploadImage(it, "profileImage")
         }
     }
     val coverLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
         uri?.let {
-            viewModel.uploadImage(it, houseNumber, "coverImage", context)
+            viewModel.uploadImage(it, "coverImage")
         }
     }
 
-    LaunchedEffect(houseNumber) {
-        databaseRef.orderByChild("houseNumber").equalTo(houseNumber).addListenerForSingleValueEvent(object : ValueEventListener {
-            override fun onDataChange(snapshot: DataSnapshot) {
-                if (snapshot.exists()) {
-                    val matchedUser = snapshot.children // matchedUser utk memfilter user
-                        .mapNotNull { it.getValue(User::class.java) }
-                        .firstOrNull { it.houseNumber == houseNumber }
-
-                    if (matchedUser != null) { user = matchedUser }
-                }
-            }
-
-            override fun onCancelled(error: DatabaseError) { }
-        })
+    // <-- Panggil fungsi ViewModel untuk mengambil data saat layar dibuka -->
+    LaunchedEffect(Unit) {
+        viewModel.fetchUserProfileData()
     }
 
     Box(
@@ -132,7 +120,7 @@ fun UserProfileScreen(
                         .size(36.dp)
                         .clip(CircleShape),
                     onClick = {
-                        navController.navigate("dashboard")
+                        navController.popBackStack() // Lebih baik menggunakan popBackStack untuk kembali
                     },
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = colorResource(id = R.color.background_button),
@@ -150,7 +138,7 @@ fun UserProfileScreen(
                     modifier = Modifier
                         .size(36.dp)
                         .clip(CircleShape),
-                    onClick = { coverLauncher.launch("image/*")},
+                    onClick = { coverLauncher.launch("image/*") },
                     colors = IconButtonDefaults.iconButtonColors(
                         containerColor = colorResource(id = R.color.background_button),
                         contentColor = colorResource(id = R.color.primary)
@@ -186,7 +174,7 @@ fun UserProfileScreen(
                         .padding(start = 60.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
                 ) {
                     Text(
-                        text = "$userName",
+                        text = userName.ifEmpty { "Nama Pengguna" },
                         fontSize = 18.sp,
                         color = colorResource(id = R.color.font),
                         fontWeight = FontWeight.Bold
@@ -202,7 +190,7 @@ fun UserProfileScreen(
                             fontSize = 12.sp
                         )
                         Text(
-                            text = "$nomorRumah",
+                            text = nomorRumah.ifEmpty { "-" },
                             fontSize = 14.sp,
                             fontWeight = FontWeight.Bold,
                             color = colorResource(id = R.color.font2)
@@ -255,6 +243,7 @@ fun UserProfileScreen(
                     fontSize = 14.sp,
                     color = Color.White
                 )
+                // UserInformation juga sebaiknya menggunakan houseNumber dari ViewModel
                 UserInformation(viewModel = viewModel)
 
                 Spacer(modifier = Modifier.height(16.dp))
